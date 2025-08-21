@@ -11,10 +11,16 @@
                 Wikimedia Events
                 <span class="badge bg-secondary ms-2">{{ total_events }}</span>
             </h1>
-            <button class="btn btn-outline-primary" id="toggleFilters">
-                <i class="fas fa-filter me-1"></i>
-                Filters
-            </button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" id="toggleFilters">
+                    <i class="fas fa-filter me-1"></i>
+                    Filters
+                </button>
+                <button class="btn btn-success" id="viewSelected">
+                    <i class="fas fa-heart me-1"></i>
+                    My Events (<span id="selectedCount">0</span>)
+                </button>
+            </div>
         </div>
 
         {% if total_events == 0 %}
@@ -187,9 +193,13 @@
                                 </div>
                                 
                                 <div class="mt-3">
+                                    <button class="btn btn-success btn-sm me-2 choose-event-btn" data-event-id="{{ event.id }}" data-event-title="{{ event.title }}">
+                                        <i class="fas fa-heart me-1"></i>
+                                        <span class="btn-text">Choose Event</span>
+                                    </button>
                                     <a href="{{ event.link }}" target="_blank" class="btn btn-outline-primary btn-sm">
                                         <i class="fas fa-eye me-1"></i>
-                                        View Event
+                                        View Details
                                     </a>
                                 </div>
                             </div>
@@ -200,6 +210,36 @@
             {% endfor %}
         </div>
         {% endif %}
+    </div>
+</div>
+
+<!-- Selected Events Modal -->
+<div class="modal fade" id="selectedEventsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-heart text-danger me-2"></i>
+                    My Selected Events
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="selectedEventsList">
+                    <div class="text-center py-4">
+                        <i class="fas fa-heart-broken fa-3x text-muted mb-3"></i>
+                        <p>No events selected yet. Choose some events to see them here!</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger" id="clearAllSelected">
+                    <i class="fas fa-trash me-1"></i>
+                    Clear All
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -222,6 +262,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const clearFiltersBtn = document.getElementById('clearFilters');
     const eventsContainer = document.getElementById('eventsContainer');
     const loadingIndicator = document.getElementById('loadingIndicator');
+    const viewSelectedBtn = document.getElementById('viewSelected');
+    const selectedEventsModal = new bootstrap.Modal(document.getElementById('selectedEventsModal'));
+    const selectedEventsList = document.getElementById('selectedEventsList');
+    const selectedCount = document.getElementById('selectedCount');
+    const clearAllSelectedBtn = document.getElementById('clearAllSelected');
+    
+    // Load selected events from localStorage
+    let selectedEvents = JSON.parse(localStorage.getItem('selectedEvents') || '[]');
+    updateSelectedCount();
     
     // Toggle filters visibility
     if (toggleFiltersBtn) {
@@ -342,6 +391,9 @@ document.addEventListener('DOMContentLoaded', function() {
             html += generateEventCard(event);
         });
         eventsContainer.innerHTML = html;
+        
+        // Update button states for the new content
+        updateAllButtonStates();
     }
     
     function generateEventCard(event) {
@@ -449,9 +501,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 
                                 <div class="mt-3">
+                                    <button class="btn btn-success btn-sm me-2 choose-event-btn" data-event-id="${event.id}" data-event-title="${event.title}">
+                                        <i class="fas fa-heart me-1"></i>
+                                        <span class="btn-text">Choose Event</span>
+                                    </button>
                                     <a href="${event.link}" target="_blank" class="btn btn-outline-primary btn-sm">
                                         <i class="fas fa-eye me-1"></i>
-                                        View Event
+                                        View Details
                                     </a>
                                 </div>
                             </div>
@@ -461,6 +517,136 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
     }
+    
+    // Handle choose event buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.choose-event-btn')) {
+            const btn = e.target.closest('.choose-event-btn');
+            const eventId = btn.getAttribute('data-event-id');
+            const eventTitle = btn.getAttribute('data-event-title');
+            
+            if (isEventSelected(eventId)) {
+                removeFromSelected(eventId);
+                updateButtonState(btn, false);
+                showAlert('Event removed from your selection', 'info');
+            } else {
+                addToSelected(eventId, eventTitle);
+                updateButtonState(btn, true);
+                showAlert('Event added to your selection!', 'success');
+            }
+            updateSelectedCount();
+        }
+    });
+    
+    // View selected events
+    if (viewSelectedBtn) {
+        viewSelectedBtn.addEventListener('click', function() {
+            displaySelectedEvents();
+            selectedEventsModal.show();
+        });
+    }
+    
+    // Clear all selected events
+    if (clearAllSelectedBtn) {
+        clearAllSelectedBtn.addEventListener('click', function() {
+            selectedEvents = [];
+            localStorage.setItem('selectedEvents', JSON.stringify(selectedEvents));
+            updateSelectedCount();
+            updateAllButtonStates();
+            displaySelectedEvents();
+            showAlert('All events cleared from selection', 'info');
+        });
+    }
+    
+    // Helper functions for event selection
+    function addToSelected(eventId, eventTitle) {
+        if (!isEventSelected(eventId)) {
+            selectedEvents.push({ id: eventId, title: eventTitle });
+            localStorage.setItem('selectedEvents', JSON.stringify(selectedEvents));
+        }
+    }
+    
+    function removeFromSelected(eventId) {
+        selectedEvents = selectedEvents.filter(event => event.id !== eventId);
+        localStorage.setItem('selectedEvents', JSON.stringify(selectedEvents));
+    }
+    
+    function isEventSelected(eventId) {
+        return selectedEvents.some(event => event.id === eventId);
+    }
+    
+    function updateSelectedCount() {
+        selectedCount.textContent = selectedEvents.length;
+    }
+    
+    function updateButtonState(btn, isSelected) {
+        const icon = btn.querySelector('i');
+        const text = btn.querySelector('.btn-text');
+        
+        if (isSelected) {
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-danger');
+            icon.className = 'fas fa-heart-broken me-1';
+            text.textContent = 'Remove Event';
+        } else {
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-success');
+            icon.className = 'fas fa-heart me-1';
+            text.textContent = 'Choose Event';
+        }
+    }
+    
+    function updateAllButtonStates() {
+        document.querySelectorAll('.choose-event-btn').forEach(btn => {
+            const eventId = btn.getAttribute('data-event-id');
+            updateButtonState(btn, isEventSelected(eventId));
+        });
+    }
+    
+    function displaySelectedEvents() {
+        if (selectedEvents.length === 0) {
+            selectedEventsList.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-heart-broken fa-3x text-muted mb-3"></i>
+                    <p>No events selected yet. Choose some events to see them here!</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div class="list-group">';
+        selectedEvents.forEach((event, index) => {
+            html += `
+                <div class="list-group-item list-group-item-dark d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1">${event.title}</h6>
+                        <small class="text-muted">Event ID: ${event.id}</small>
+                    </div>
+                    <button class="btn btn-outline-danger btn-sm remove-selected" data-event-id="${event.id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        selectedEventsList.innerHTML = html;
+        
+        // Add event listeners for remove buttons
+        selectedEventsList.querySelectorAll('.remove-selected').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const eventId = this.getAttribute('data-event-id');
+                removeFromSelected(eventId);
+                updateSelectedCount();
+                updateAllButtonStates();
+                displaySelectedEvents();
+                showAlert('Event removed from selection', 'info');
+            });
+        });
+    }
+    
+    // Initialize button states on page load
+    updateAllButtonStates();
 });
 </script>
 {% endblock %}
